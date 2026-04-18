@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>水粉调色大师 - 终极演示版</title>
+    <style>
+        :root { --bg: #1c1c1e; --card: #2c2c2e; --accent: #0a84ff; --demo: #ff9f0a; }
+        body { font-family: system-ui; background: var(--bg); color: #fff; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        .header { padding: 15px; background: var(--card); display: flex; justify-content: space-between; }
+        .main-stage { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
+        .well-group { display: flex; align-items: center; gap: 20px; }
+        .well { width: 100px; height: 100px; border-radius: 50%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 3px solid #444; }
+        
+        /* 演示状态指示器 */
+        #demo-status { 
+            position: absolute; top: 20px; background: var(--demo); color: #000; 
+            padding: 5px 15px; border-radius: 20px; font-weight: bold; font-size: 12px;
+            display: none; animation: blink 1s infinite;
+        }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        .footer { background: var(--card); padding: 20px; border-top-left-radius: 20px; border-top-right-radius: 20px; }
+        .pigment-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+        .tube { aspect-ratio: 1/1; border-radius: 50%; border: none; opacity: 1; transition: 0.2s; }
+        .active-tube { transform: scale(1.2); box-shadow: 0 0 15px white; }
+
+        .btn-group { display: flex; gap: 10px; }
+        .btn { flex: 1; padding: 15px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div style="font-weight:bold;">水粉调色实验室</div>
+    <div id="score-val" style="color:var(--demo)">匹配度: --</div>
+</div>
+
+<div class="main-stage">
+    <div id="demo-status">大师演示中...</div>
+    <div class="well-group">
+        <div id="target" class="well"></div>
+        <div style="font-size:30px; color:#444;">✦</div>
+        <div id="current" class="well" style="background:white;"></div>
+    </div>
+    <p id="tutor-text" style="margin-top:20px; font-size:14px; color:#888;">观察大师的调色顺序</p>
+</div>
+
+<div class="footer">
+    <div class="pigment-bar" id="pigment-bar">
+        <button id="p-red" class="tube" style="background:#ff3b30"></button>
+        <button id="p-yellow" class="tube" style="background:#ffcc00"></button>
+        <button id="p-blue" class="tube" style="background:#007aff"></button>
+        <button id="p-black" class="tube" style="background:#000"></button>
+        <button id="p-white" class="tube" style="background:#fff"></button>
+    </div>
+    <div class="btn-group">
+        <button class="btn" style="background:var(--demo); color:#000;" onclick="startAutoDemo()">大师演示</button>
+        <button class="btn" style="background:var(--accent); color:#fff;" onclick="reset()">换一题</button>
+        <button class="btn" style="background:#444; color:#fff;" onclick="undo()">撤销</button>
+    </div>
+</div>
+
+<script>
+    let target = {r:0, g:0, b:0}, current = {r:255, g:255, b:255}, stack = [];
+    let isDemoing = false;
+
+    function reset() {
+        if(isDemoing) return;
+        target = { r: Math.random()*200, g: Math.random()*200, b: Math.random()*200 };
+        current = {r:255, g:255, b:255};
+        stack = [{...current}];
+        document.getElementById('target').style.backgroundColor = `rgb(${target.r},${target.g},${target.b})`;
+        document.getElementById('tutor-text').innerText = "现在，轮到你来挑战了！";
+        render();
+    }
+
+    function mix(r, g, b, silent = false) {
+        if(!silent) {
+            stack.push({...current});
+            if(stack.length > 20) stack.shift();
+        }
+        const ratio = 0.15;
+        current.r = current.r * (1-ratio) + r * ratio;
+        current.g = current.g * (1-ratio) + g * ratio;
+        current.b = current.b * (1-ratio) + b * ratio;
+        render();
+    }
+
+    function render() {
+        document.getElementById('current').style.backgroundColor = `rgb(${current.r},${current.g},${current.b})`;
+        const d = Math.sqrt(Math.pow(target.r-current.r,2)+Math.pow(target.g-current.g,2)+Math.pow(target.b-current.b,2));
+        document.getElementById('score-val').innerText = "匹配度: " + Math.max(0, 100 - (d/4.41)).toFixed(0) + "%";
+    }
+
+    function undo() { if(!isDemoing && stack.length > 1) { current = stack.pop(); render(); } }
+
+    // --- 大师演示逻辑 ---
+    async function startAutoDemo() {
+        if(isDemoing) return;
+        isDemoing = true;
+        current = {r:255, g:255, b:255}; // 从头演示
+        document.getElementById('demo-status').style.display = 'block';
+        
+        const pigments = [
+            { id: 'p-red', r: 255, g: 59, b: 48 },
+            { id: 'p-yellow', r: 255, g: 204, b: 0 },
+            { id: 'p-blue', r: 0, g: 122, b: 255 },
+            { id: 'p-black', r: 20, g: 20, b: 20 },
+            { id: 'p-white', r: 255, g: 255, b: 255 }
+        ];
+
+        // 贪心算法模拟调色：每一步选择让误差最小的颜色
+        for(let i = 0; i < 15; i++) {
+            let bestPigment = pigments[0];
+            let minDiff = 999999;
+
+            pigments.forEach(p => {
+                let testR = current.r * 0.85 + p.r * 0.15;
+                let testG = current.g * 0.85 + p.g * 0.15;
+                let testB = current.b * 0.85 + p.b * 0.15;
+                let diff = Math.sqrt(Math.pow(target.r-testR,2)+Math.pow(target.g-testG,2)+Math.pow(target.b-testB,2));
+                if(diff < minDiff) {
+                    minDiff = diff;
+                    bestPigment = p;
+                }
+            });
+
+            // 执行演示动画
+            const el = document.getElementById(bestPigment.id);
+            el.classList.add('active-tube');
+            mix(bestPigment.r, bestPigment.g, bestPigment.b, true);
+            await new Promise(r => setTimeout(r, 400));
+            el.classList.remove('active-tube');
+            
+            if(minDiff < 5) break; // 已经足够接近
+        }
+
+        isDemoing = false;
+        document.getElementById('demo-status').style.display = 'none';
+        document.getElementById('tutor-text').innerText = "演示结束，看懂大师的操作了吗？";
+    }
+
+    reset();
+</script>
+</body>
+</html>
